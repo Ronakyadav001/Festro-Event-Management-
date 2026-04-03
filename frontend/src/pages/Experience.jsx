@@ -1,0 +1,450 @@
+import React, { useState, useEffect } from 'react';
+import { FaImage, FaCalendarAlt, FaClock } from 'react-icons/fa';
+import Toast from '../component/Toast';
+
+const Experience = () => {
+  const [experiences, setExperiences] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userData, setUserData] = useState(null);
+
+  const [formData, setFormData] = useState({
+    eventName: '',
+    description: '',
+    image: null
+  });
+
+  const API_URL = import.meta.env.VITE_API_URL;
+  // Check authentication status
+  const checkAuth = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/check`, {
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.isAuthenticated) {
+        setIsLoggedIn(true);
+        const userResponse = await fetch(`${API_URL}/api/auth/me`, {
+          credentials: 'include'
+        });
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          setUserData(userData.user);
+        }
+      } else {
+        setIsLoggedIn(false);
+        setUserData(null);
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      setIsLoggedIn(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    checkAuth();
+    const interval = setInterval(checkAuth, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    fetchExperiences();
+    fetchEvents();
+  }, []);
+
+  const [toast, setToast] = useState({
+    show: false,
+    message: "",
+    type: "success",
+  });
+
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast((prev) => ({ ...prev, show: false }));
+    }, 3000);
+  };
+
+  const fetchExperiences = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/experiences`);
+      const data = await res.json();
+      setExperiences(data);
+    } catch (err) {
+      console.error("Fetch experiences error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/events`);
+      const data = await res.json();
+      setEvents(data);
+    } catch (err) {
+      console.error("Fetch events error:", err);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!isLoggedIn) {
+      showToast("Login required!", "error");
+      return;
+    }
+
+    if (submitting) return;
+    
+    if (!userData) {
+      showToast("Logged in user data incomplete!", "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const data = new FormData();
+      data.append('userName', userData.name);
+      data.append('eventName', formData.eventName);
+      data.append('description', formData.description);
+      // Date/time will be set automatically on the server (current timestamp)
+      if (formData.image) {
+        data.append('image', formData.image);
+      }
+
+      const res = await fetch(`${API_URL}/api/experiences`, {
+        method: 'POST',
+        credentials: 'include',
+        body: data
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || 'Failed to submit');
+      }
+      
+      showToast("Experience shared successfully!", "success");
+      setFormData({
+        eventName: '',
+        description: '',
+        image: null
+      });
+      fetchExperiences();
+    } catch (err) {
+      console.error("Submit error:", err);
+      showToast(err.message || 'Failed to share experience. Please try again.', "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const options = { year: 'numeric', month: 'short', day: 'numeric' };
+      return new Date(dateStr).toLocaleDateString('en-US', options);
+    } catch (err) {
+      return 'Invalid date';
+    }
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const options = { hour: '2-digit', minute: '2-digit' };
+      return new Date(dateStr).toLocaleTimeString('en-US', options);
+    } catch (err) {
+      return 'Invalid time';
+    }
+  };
+
+  const timeAgo = (date) => {
+    if (!date) return 'Just now';
+    try {
+      const now = new Date();
+      const diff = now - new Date(date);
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return `${days}d ago`;
+      const weeks = Math.floor(days / 7);
+      if (weeks < 4) return `${weeks}w ago`;
+      const months = Math.floor(days / 30);
+      if (months < 12) return `${months}mo ago`;
+      const years = Math.floor(days / 365);
+      return `${years}y ago`;
+    } catch (err) {
+      return 'Recently';
+    }
+  };
+
+  const handleImageChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData({ ...formData, image: e.target.files[0] });
+    }
+  };
+
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name.charAt(0).toUpperCase();
+  };
+
+  return (
+    <div className="min-h-screen bg-[#ebe9e1]">
+      <Toast toast={toast} setToast={setToast} />
+      <div className="w-full bg-slate-900 top-0 bottom-90 p-11.5"></div>
+      
+      <div className="max-w-6xl mx-auto pt-24 pb-12 px-4 md:px-8 max-md:mx-3">
+        {/* Header */}
+        <div className="mb-10">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 mb-2">
+            Festro <span className="text-[#702c2c]">Blog</span>
+          </h1>
+          <p className="text-stone-600 text-lg">
+            Share your event memories with the community
+          </p>
+        </div>
+
+        {/* Two Column Layout */}
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Left: Form */}
+          <div className="w-full lg:w-2/5">
+            <div className="bg-white rounded-2xl border border-stone-200 p-6 sticky top-28 shadow-sm hover:shadow-md transition-shadow duration-200">
+              <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                Share Your Experience
+              </h3>
+
+              {!isLoggedIn ? (
+                <div className="text-center py-8 rounded-xl bg-stone-50 border border-stone-200">
+                  <div className="w-16 h-16 bg-[#702c2c]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  </div>
+                  <p className="text-gray-600 mb-4">Please login to share your experience</p>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Your Name
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        value={userData?.name || ''}
+                        readOnly
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl 
+                          text-slate-700 font-medium cursor-default"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Event Attended *
+                    </label>
+                    <div className="relative">
+                      <select 
+                        required 
+                        className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl 
+                          focus:ring-2 focus:ring-[#702c2c]/20 focus:border-[#702c2c] outline-none
+                          appearance-none cursor-pointer"
+                        value={formData.eventName}
+                        onChange={(e) => setFormData({ ...formData, eventName: e.target.value })}
+                      >
+                        <option value="" className="text-stone-400">Select an event</option>
+                        {events.map((event) => (
+                          <option key={event._id} value={event.title} className="text-slate-700">
+                            {event.title}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <svg className="w-5 h-5 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Your Experience *
+                    </label>
+                    <textarea 
+                      rows="4" 
+                      className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl 
+                        focus:ring-2 focus:ring-[#702c2c]/20 focus:border-[#702c2c] outline-none
+                        resize-none"
+                      placeholder="Share what you loved about the event..."
+                      value={formData.description} 
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-1">
+                      <FaImage className="text-xs" /> Photo (optional)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="file" 
+                        id="expImg" 
+                        accept="image/*" 
+                        className="hidden"
+                        onChange={handleImageChange} 
+                      />
+                      <label 
+                        htmlFor="expImg" 
+                        className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl 
+                          text-slate-700 text-sm font-medium cursor-pointer hover:bg-stone-100 
+                          transition-colors flex items-center gap-2"
+                      >
+                        <FaImage className="text-stone-400" />
+                        Choose Photo
+                      </label>
+                      <span className="text-sm text-stone-500 truncate flex-1">
+                        {formData.image ? formData.image.name : 'No photo chosen'}
+                      </span>
+                      {formData.image && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, image: null })}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={submitting}
+                    className={`w-full py-3.5 rounded-xl font-medium text-sm transition-all duration-200
+                      ${submitting 
+                        ? 'bg-stone-400 cursor-not-allowed' 
+                        : 'bg-[#702c2c] hover:bg-[#5a2323] hover:shadow-lg'} 
+                      text-white flex items-center justify-center gap-2`}
+                  >
+                    {submitting ? 'Posting...' : 'Share Experience'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Posts */}
+          <div className="w-full lg:w-3/5">
+            {loading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((_, idx) => (
+                  <div key={idx} className="bg-white rounded-2xl border border-stone-200 p-6 animate-pulse">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 bg-stone-200 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="h-4 bg-stone-200 rounded-full w-1/4 mb-2"></div>
+                        <div className="h-3 bg-stone-200 rounded-full w-1/2"></div>
+                      </div>
+                    </div>
+                    <div className="h-32 bg-stone-200 rounded-xl mb-3"></div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-stone-200 rounded-full"></div>
+                      <div className="h-3 bg-stone-200 rounded-full w-5/6"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : experiences.length === 0 ? (
+              <div className="bg-white rounded-2xl border-2 border-dashed border-stone-300 p-12 text-center">
+                <h3 className="text-xl font-bold text-slate-800 mb-2">No experiences yet</h3>
+                <p className="text-stone-500 mb-6">Be the first to share your event experience!</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {experiences.map((exp) => (
+                  <div key={exp._id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden 
+                    hover:shadow-md transition-shadow duration-200">
+                    
+                    {/* Post Header */}
+                    <div className="p-6 border-b border-stone-100">
+                      <div className="flex items-start gap-4">
+                        <div className="w-14 h-14 bg-linear-to-br from-[#702c2c] to-[#5a2323] 
+                          rounded-full flex items-center justify-center text-white font-bold text-xl 
+                          shadow-md">
+                          {getInitials(exp.userName)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-slate-800 text-lg">
+                                {exp.userName || 'Anonymous User'}
+                              </h4>
+                              <p className="text-sm text-stone-600 mt-1">
+                                Event: <span className="font-semibold text-[#702c2c]">{exp.eventName}</span>
+                              </p>
+                            </div>
+                            <span className="text-xs text-stone-500 bg-stone-100 px-3 py-1 rounded-full">
+                              {timeAgo(exp.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Posting Date/Time */}
+                    <div className="px-6 py-4 bg-linear-to-r from-stone-50 to-white flex items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <FaCalendarAlt className="text-stone-400 text-sm" />
+                        <span className="text-sm text-slate-700 font-medium">
+                          {formatDate(exp.createdAt)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <FaClock className="text-stone-400 text-sm" />
+                        <span className="text-sm text-slate-700 font-medium">
+                          {formatTime(exp.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Image */}
+                    {exp.image && (
+                      <div className="w-full">
+                        <img 
+                          src={exp.image.startsWith('http') ? exp.image : `${API_URL}${exp.image}`} 
+                          alt="Experience" 
+                          className="w-full max-h-96 object-cover" 
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    <div className="p-6">
+                      <p className="text-slate-700 leading-relaxed">{exp.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Experience;
